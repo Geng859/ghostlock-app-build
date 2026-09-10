@@ -44,6 +44,12 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ghostlock-app/gradlew
 
+      - name: Show environment
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME"
+          ./ghostlock-app/gradlew --version || true
+          ls -la ghostlock-app || true
+
       - name: Cache Gradle
         uses: actions/cache@v4
         with:
@@ -52,10 +58,22 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/ghostlock-app/**.gradle*','**/gradle-wrapper.properties') }}
 
-      - name: Build debug APK
-        run: ./ghostlock-app/gradlew assembleDebug --no-daemon
+      - name: Build debug APK (capture output)
+        run: |
+          set -o pipefail
+          cd ghostlock-app
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee build.log
+        continue-on-error: true
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ghostlock-app/build.log
 
       - name: Create GitHub Release
+        if: success()
         id: create_release
         uses: actions/create-release@v1
         with:
@@ -67,6 +85,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload APK to Release
+        if: success()
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
