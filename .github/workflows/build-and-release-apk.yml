@@ -1,0 +1,67 @@
+name: Build and release APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Checkout upstream ghostlock-app
+        uses: actions/checkout@v4
+        with:
+          repository: YuKongA/ghostlock-app
+          path: ghostlock-app
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK & Build tools
+        uses: r0adkll/setup-android@v2
+        with:
+          api-level: 33
+          build-tools: '33.0.2'
+
+      - name: Make gradlew executable
+        run: chmod +x ghostlock-app/gradlew
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/ghostlock-app/**.gradle*','**/gradle-wrapper.properties') }}
+
+      - name: Build debug APK
+        run: ./ghostlock-app/gradlew assembleDebug --no-daemon
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: apk-build-${{ github.run_id }}
+          release_name: APK Build ${{ github.run_id }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload APK to Release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ghostlock-app/app/build/outputs/apk/debug/app-debug.apk
+          asset_name: app-debug.apk
+          asset_content_type: application/vnd.android.package-archive
